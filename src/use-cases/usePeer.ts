@@ -9,19 +9,31 @@ export interface IDataDetail {
     date: number,
 }
 
+let gconn: DataConnection | null = null;
+let gpeer: PeerJs | null = null;
+
 const usePeer = () => {
     const [peerId, setPeerId] = useState<string>('');
-    const [conn, setConn] = useState<DataConnection>();
     const [roomId, setRoomId] = useState<string>('');
     const _subData = useRef<(dataDetail: IDataDetail) => void>(() => { });
 
     const peerConfig = {
-        host: "server-ip",
+        host: location.hostname,
         port: Number(location.port || (location.protocol === 'https:' ? 443 : 80)),
         path: '/test-x',
     }
 
+    // const peerConfig = {}
 
+    const disconnect = () => {
+        gpeer?.disconnect();
+        gpeer?.destroy();
+        gconn?.close();
+        gconn = null;
+        gpeer = null;
+        setPeerId("");
+        setRoomId("");
+    }
 
     const subscribe = (fcb: (dataDetail: IDataDetail) => void) => {
         _subData.current = fcb;
@@ -46,6 +58,9 @@ const usePeer = () => {
     }
 
     const startPeer = async () => {
+        if (!!peerId) {
+            return;
+        }
         try {
             const { peerId, peerInst } = await initialize();
             peerInst?.on('connection', (pconn) => {
@@ -53,8 +68,7 @@ const usePeer = () => {
                     _subData.current(data as IDataDetail);
                     pconn.send(data as IDataDetail);
                 });
-
-                setConn(() => pconn);
+                gconn = pconn;
             });
 
             setPeerId(peerId);
@@ -66,12 +80,15 @@ const usePeer = () => {
     }
 
     const joinToPeer = async (remotePeerId: string) => {
+        if (!!peerId) {
+            return;
+        }
         try {
             const { peerId, peerInst } = await initialize();
 
             const pconn = peerInst?.connect(remotePeerId);
             pconn?.on('open', () => {
-                setConn(() => pconn);
+                gconn = pconn;
             })
             pconn?.on("data", (data) => {
                 _subData.current(data as IDataDetail);
@@ -84,7 +101,7 @@ const usePeer = () => {
     }
 
     const sendData = (data: IDataDetail) => {
-        conn?.send(data);
+        gconn?.send(data);
     }
 
 
@@ -95,8 +112,9 @@ const usePeer = () => {
         subscribe,
         roomId,
         peerId,
-        isHost: peerId === roomId,
+        isHost: !!peerId && peerId === roomId,
         isConnected: !!peerId,
+        disconnect,
     }
 
 }
