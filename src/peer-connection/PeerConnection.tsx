@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import styled from "styled-components";
 import { useDebouncedCallback } from "use-debounce";
-import { usePeer } from "../use-cases/usePeer";
+import { useMount } from "../use-cases/useMount";
+import { IDataDetail, usePeer } from "../use-cases/usePeer";
 
 const PeerConnectionBox = styled.div`
     display: flex;
@@ -13,35 +14,84 @@ const BasicInput = styled.input`
     height: 1.5rem;
 `;
 
+const MsgItem = styled.li`
+    text-align: left;  
+`;
 
 const PeerConnecion: React.FC = () => {
-    const { createOffer, connect, connId, sendData } = usePeer();
-    const isConnected = true;
-    const [outerId, setOuterId] = useState('')
+    const { startPeer, isHost, sendData, joinToPeer, subscribe, roomId, peerId, isConnected } = usePeer();
+    const [msgs, setMsgs] = useState<IDataDetail[]>([]);
+    const [userName, setUserName] = useState<string>('')
+    const hasUserName = userName.trim().length > 3;
 
-    const genOffer = async () => {
-        const rs = await createOffer();
-        console.log('rs:', rs);
-    }
-
-    const connectMe = () => {
-        console.log('outer id:', outerId);
-        connect(outerId);
-    }
-
-    const outerIdDebounced = useDebouncedCallback((value: string) => {
-        setOuterId(value);
+    const changeUserNameDebounced = useDebouncedCallback((value: string) => {
+        setUserName(value);
     }, 800);
 
-    const onChangeOuterId = (evt: React.ChangeEvent<HTMLInputElement>) => {
-        outerIdDebounced(evt.target.value);
+    const onChangeUserName = (evt: React.ChangeEvent<HTMLInputElement>) => {
+        changeUserNameDebounced(evt.target.value);
     }
 
     const onChangeMsg = (evt: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (evt.key === 'Enter') {
-            sendData(evt.currentTarget.value);
+            const msgDetail = {
+                date: new Date().getTime(),
+                msg: evt.currentTarget.value,
+                userName,
+                id: `${new Date().getTime()}_${peerId}`,
+                userId: peerId,
+            };
+
+            sendData(msgDetail);
+
+            if (isHost) {
+                setMsgs(oldMsgs => [
+                    ...oldMsgs,
+                    msgDetail,
+                ])
+            }
+
             evt.currentTarget.value = '';
         }
+    }
+
+    const startPeerHandle = async () => {
+        await startPeer();
+    }
+
+    const joinPeerHandle = async () => {
+        const remotePeerId = prompt("");
+        if (remotePeerId && remotePeerId.trim().length > 8) {
+            await joinToPeer(remotePeerId);
+        }
+    }
+
+    useMount(async () => {
+        subscribe(msgDetail => {
+            setMsgs(oldMsgs => [
+                ...oldMsgs,
+                msgDetail,
+            ])
+        })
+    });
+
+    if (!isConnected) {
+        return (
+            <PeerConnectionBox>
+                <label>
+                    status: {isConnected ? 'connected' : 'not-connected'} v.0.0.1
+                </label>
+                <label>
+                    <BasicInput type="text" onChange={onChangeUserName} placeholder="put your name here" />
+                </label>
+                <button disabled={!hasUserName} onClick={startPeerHandle}>
+                    create a room
+                </button>
+                <button disabled={!hasUserName} onClick={joinPeerHandle}>
+                    join a room
+                </button>
+            </PeerConnectionBox>
+        )
     }
 
     return (
@@ -49,21 +99,22 @@ const PeerConnecion: React.FC = () => {
             <label>
                 status: {isConnected ? 'connected' : 'not-connected'}
             </label>
-            <button onClick={genOffer}>
-                start peer
-            </button>
             <label>
-                {connId}
+                room id: {roomId}
             </label>
+            <ol>
+                {msgs.map((msgDetail) => (
+                    <MsgItem
+                        key={`${msgDetail.id}`}
+                    >
+                        @{msgDetail.userName}, {msgDetail.msg}
+                    </MsgItem>
+                ))}
+            </ol>
             <label>
-                <BasicInput type="text" onChange={onChangeOuterId} placeholder="put offer here" />
+                your msg:
             </label>
-            <button onClick={connectMe}>
-                connect-me
-            </button>
-
-            <textarea onKeyUp={onChangeMsg} ></textarea>
-
+            <textarea placeholder="write a msg and press enter to send!" onKeyUp={onChangeMsg} ></textarea>
         </PeerConnectionBox>
     )
 }

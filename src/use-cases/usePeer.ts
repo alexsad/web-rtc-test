@@ -1,65 +1,102 @@
 import PeerJs, { DataConnection } from 'peerjs';
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
+
+export interface IDataDetail {
+    msg: string,
+    id: string,
+    userName: string,
+    userId: string,
+    date: number,
+}
 
 const usePeer = () => {
-    const [availablePeer, setAvailablePeer] = useState<PeerJs>();
-    const [connId, setConnId] = useState<string>('');
+    const [peerId, setPeerId] = useState<string>('');
     const [conn, setConn] = useState<DataConnection>();
+    const [roomId, setRoomId] = useState<string>('');
+    const _subData = useRef<(dataDetail: IDataDetail) => void>(() => { });
 
     const peerConfig = {
-        host: "0.peerjs.com",
-        port: 443,
-        path: "/",
-        pingInterval: 5000,
+        host: "server-ip",
+        port: Number(location.port || (location.protocol === 'https:' ? 443 : 80)),
+        path: '/test-x',
     }
 
-    // const peerConfig = {
-    //     host: "localhost",
-    //     port: 5173,
-    //     path: "/myapp",
-    // }
 
-    const createOffer = () => {
-        setAvailablePeer(new PeerJs(peerConfig));
-    }
 
-    const acceptOffer = (offerId: string) => {
-        setAvailablePeer(new PeerJs(offerId, peerConfig));
-    }
+    const subscribe = (fcb: (dataDetail: IDataDetail) => void) => {
+        _subData.current = fcb;
+    };
 
-    const connect = (otherOfferId: string) => {
-        availablePeer?.on("connection", (pconn) => {
-            console.log('conn:', pconn);
-            pconn.on("data", (data) => {
-                console.log("Received data", data);
+    const initialize = async () => {
+        const peer = new PeerJs('', peerConfig);
+        return new Promise<{
+            peerId: string,
+            peerInst: PeerJs,
+        }>((success, error) => {
+            peer.on('open', ppeerId => {
+                success({
+                    peerId: ppeerId,
+                    peerInst: peer,
+                });
             });
-            setConn(pconn);
-        });
-        console.log('conn-outer id:', otherOfferId);
-        availablePeer?.connect(otherOfferId);
+            peer.on('error', function (err) {
+                error(err);
+            })
+        })
     }
 
-    const sendData = (data: any) => {
-        console.log('data-to:', data);
+    const startPeer = async () => {
+        try {
+            const { peerId, peerInst } = await initialize();
+            peerInst?.on('connection', (pconn) => {
+                pconn?.on("data", (data) => {
+                    _subData.current(data as IDataDetail);
+                    pconn.send(data as IDataDetail);
+                });
+
+                setConn(() => pconn);
+            });
+
+            setPeerId(peerId);
+            setRoomId(peerId);
+
+        } catch (error) {
+            console.log(error);
+        }
+    }
+
+    const joinToPeer = async (remotePeerId: string) => {
+        try {
+            const { peerId, peerInst } = await initialize();
+
+            const pconn = peerInst?.connect(remotePeerId);
+            pconn?.on('open', () => {
+                setConn(() => pconn);
+            })
+            pconn?.on("data", (data) => {
+                _subData.current(data as IDataDetail);
+            });
+            setRoomId(remotePeerId);
+            setPeerId(peerId);
+        } catch (error) {
+            console.log(error);
+        }
+    }
+
+    const sendData = (data: IDataDetail) => {
         conn?.send(data);
     }
 
-    useEffect(() => {
-        if (availablePeer) {
-            availablePeer.on('open', pconnId => {
-                console.log('connid:', pconnId);
-                setConnId(pconnId);
-            });
-        }
-    }, [availablePeer])
-
 
     return {
-        createOffer,
-        acceptOffer,
-        connect,
-        connId,
+        startPeer,
+        joinToPeer,
         sendData,
+        subscribe,
+        roomId,
+        peerId,
+        isHost: peerId === roomId,
+        isConnected: !!peerId,
     }
 
 }
