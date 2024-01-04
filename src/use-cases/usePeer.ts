@@ -6,18 +6,18 @@ const usePeer = () => {
     const [connId, setConnId] = useState<string>('');
     const [conn, setConn] = useState<DataConnection>();
 
-    // const peerConfig = {
-    //     host: "0.peerjs.com",
-    //     port: 443,
-    //     path: "/",
-    //     pingInterval: 5000,
-    // }
-
     const peerConfig = {
-        host: "localhost",
-        port: 5173,
-        path: "/myapp",
+        host: "0.peerjs.com",
+        port: 443,
+        path: "/",
+        pingInterval: 5000,
     }
+
+    // const peerConfig = {
+    //     host: "localhost",
+    //     port: 5173,
+    //     path: "/myapp",
+    // }
 
     const createOffer = () => {
         setAvailablePeer(new PeerJs(peerConfig));
